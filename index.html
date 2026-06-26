@@ -1,0 +1,1071 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brook CPT decision tree</title>
+<style>
+  :root{
+    --sans: ui-sans-serif, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+    --bg:#f6f7f9; --card:#ffffff; --ink:#1c2630; --muted:#5d6b79; --faint:#8b97a3;
+    --border:#e3e8ed; --border-strong:#cdd5dd; --edge:#9aa6b2; --focus:#1f6feb;
+    --teal:#0f6e56; --teal-fill:#e1f5ee; --teal-ink:#085041;
+    --indigo:#534ab7; --indigo-fill:#eeedfe; --indigo-ink:#3c3489;
+    --gray:#5f5e5a; --gray-fill:#f1efe8; --gray-ink:#444441;
+    --red:#a32d2d; --red-fill:#fcebeb; --red-ink:#791f1f;
+    --hi: color-mix(in srgb, var(--focus) 14%, transparent);
+    --shadow: 0 1px 2px rgba(20,30,45,.06), 0 6px 24px rgba(20,30,45,.05);
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#0e1318; --card:#161d25; --ink:#e8edf2; --muted:#9fb0bf; --faint:#7c8a98;
+      --border:#28323d; --border-strong:#3a4754; --edge:#5d6b79; --focus:#5ea0ff;
+      --teal:#5dcaa5; --teal-fill:#0c2a23; --teal-ink:#9fe1cb;
+      --indigo:#afa9ec; --indigo-fill:#211d3f; --indigo-ink:#cecbf6;
+      --gray:#b4b2a9; --gray-fill:#23262b; --gray-ink:#d3d1c7;
+      --red:#f09595; --red-fill:#2c1414; --red-ink:#f7c1c1;
+      --hi: color-mix(in srgb, var(--focus) 26%, transparent);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 28px rgba(0,0,0,.35);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg); color:var(--ink); font-family:var(--sans); line-height:1.55; -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1520px; margin:0 auto; padding:28px 24px 64px;}
+  header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:18px;}
+  header.top h1{font-size:25px; font-weight:600; letter-spacing:-.02em; margin:0;}
+  header.top p{margin:6px 0 0; color:var(--muted); max-width:none; font-size:14.5px;}
+  .eyebrow{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 4px;}
+  .vchip{font:600 11px var(--mono); letter-spacing:.04em; color:var(--muted); background:var(--card); border:1px solid var(--border-strong); border-radius:999px; padding:4px 11px; white-space:nowrap;}
+  .vchip .mode{color:var(--faint); text-transform:uppercase; letter-spacing:.1em;}
+
+  .toolbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px 18px; padding:12px 14px; background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:18px;}
+  .legend{display:flex; flex-wrap:wrap; gap:6px 16px; align-items:center;}
+  .legend .item{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--muted);}
+  .sw{width:13px; height:13px; border-radius:4px; border:1px solid var(--border-strong); flex:none;}
+  .sw.nurse{background:var(--teal-fill); border-color:var(--teal);}
+  .sw.noNurse{background:var(--indigo-fill); border-color:var(--indigo);}
+  .sw.decision{background:var(--gray-fill); border-color:var(--gray);}
+  .sw.gated{background:#fff4dd; border-color:#c8932e;}
+  .sw.outOfScope{background:var(--red-fill); border-color:var(--red);}
+  .sw.dash{background:transparent; border:0; width:22px; height:0; border-top:2px dashed var(--edge); border-radius:0;}
+  .spacer{flex:1 1 auto;}
+  .controls{display:flex; flex-wrap:wrap; gap:8px; align-items:center;}
+  button.btn, label.btn{font:500 13px var(--sans); color:var(--ink); background:var(--card); border:1px solid var(--border-strong); border-radius:8px; padding:7px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:7px;}
+  button.btn:hover, label.btn:hover{border-color:var(--focus);}
+  button.btn[aria-pressed="true"]{background:var(--indigo-fill); border-color:var(--indigo); color:var(--indigo-ink);}
+  button.btn.subtle{border-color:var(--border); color:var(--muted);}
+  .status{font-size:12.5px; color:var(--muted); min-height:1em;}
+
+  .grid{display:grid; grid-template-columns:1fr; gap:18px;}
+  @media (min-width:1200px){ .grid{grid-template-columns:minmax(0,1fr) 392px;} }
+
+  .treewrap{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:8px; overflow-x:auto;}
+  svg.tree{display:block; width:100%; min-width:680px; height:auto;}
+
+  .node{cursor:pointer; outline:none;}
+  .node rect{transition:stroke-width .12s ease;}
+  .node text{pointer-events:none; user-select:none;}
+  .node text.t{font:600 14px var(--sans);}
+  .node text.code{font:500 11px var(--mono);}
+  .node text.sub{font:400 12px var(--sans); fill:var(--muted);}
+  .n-start rect{fill:var(--gray-fill); stroke:var(--gray-ink); stroke-width:1;}
+  .n-start text.t{fill:var(--gray-ink);}
+  .n-decision rect{fill:var(--gray-fill); stroke:var(--gray); stroke-width:1;}
+  .n-decision text.t{fill:var(--gray-ink);}
+  .n-nurse rect{fill:var(--teal-fill); stroke:var(--teal); stroke-width:1;}
+  .n-nurse text.t{fill:var(--teal-ink);} .n-nurse text.code{fill:var(--teal);}
+  .n-noNurse rect{fill:var(--indigo-fill); stroke:var(--indigo); stroke-width:1;}
+  .n-noNurse text.t{fill:var(--indigo-ink);} .n-noNurse text.code{fill:var(--indigo);}
+  .n-outOfScope rect{fill:var(--red-fill); stroke:var(--red); stroke-width:1;}
+  .n-outOfScope text.t{fill:var(--red-ink);} .n-outOfScope text.sub{fill:var(--red);}
+  .node:hover rect{stroke-width:2;}
+  .node:focus-visible rect{stroke:var(--focus); stroke-width:2.5;}
+  .node.selected rect{stroke-width:2.5;}
+  .edge{stroke:var(--edge); stroke-width:1.5; fill:none;}
+  .edge.dashed{stroke-dasharray:5 4;}
+  @media (prefers-reduced-motion: no-preference){
+    @keyframes flash{0%,100%{stroke-width:1;} 30%,60%{stroke-width:3;}}
+    .node.flash rect{animation:flash 1.1s ease;}
+  }
+
+  .panel{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:20px 20px 22px;}
+  @media (min-width:1200px){ .panel{position:sticky; top:18px; max-height:calc(100vh - 36px); overflow:auto;} }
+  .kind-tag{display:inline-block; font:600 10.5px var(--mono); letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; border-radius:999px; margin-bottom:10px;}
+  .kind-tag.nurse{background:var(--teal-fill); color:var(--teal-ink);}
+  .kind-tag.noNurse{background:var(--indigo-fill); color:var(--indigo-ink);}
+  .kind-tag.decision,.kind-tag.start{background:var(--gray-fill); color:var(--gray-ink);}
+  .kind-tag.outOfScope{background:var(--red-fill); color:var(--red-ink);}
+  .panel h2{font-size:19px; font-weight:600; letter-spacing:-.01em; margin:0 0 12px;}
+
+  .tabbar{display:inline-flex; background:var(--bg); border:1px solid var(--border-strong); border-radius:9px; padding:3px; gap:3px; margin:0 0 14px;}
+  .tabbar button{font:600 12.5px var(--sans); color:var(--muted); background:transparent; border:0; border-radius:7px; padding:6px 13px; cursor:pointer;}
+  .tabbar button[aria-selected="true"]{background:var(--card); color:var(--ink); box-shadow:var(--shadow);}
+
+  .codes{display:flex; flex-wrap:wrap; gap:6px; margin:0 0 14px;}
+  .chip{font:600 12.5px var(--mono); background:var(--bg); border:1px solid var(--border-strong); border-radius:7px; padding:3px 9px; color:var(--ink);}
+  button.chip{cursor:pointer;}
+  button.chip:hover{border-color:var(--focus); color:var(--focus);}
+  .codeline{display:block; margin:0 0 4px; font-size:13px; color:var(--muted);}
+  .codeline b{font-family:var(--mono); font-weight:600; color:var(--ink);}
+  .panel h3{font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin:18px 0 7px;}
+  .panel p{margin:0 0 8px; font-size:14px;}
+  .panel ul{margin:0 0 8px; padding-left:18px;}
+  .panel li{font-size:14px; margin:0 0 5px;}
+  .muted-note{font-size:13px; color:var(--muted); margin:0 0 12px;}
+  a.xref{color:var(--focus); text-decoration:none; border-bottom:1px solid color-mix(in srgb, var(--focus) 35%, transparent); cursor:pointer;}
+  a.xref:hover{border-bottom-color:var(--focus);}
+  .related{display:flex; flex-wrap:wrap; gap:7px; margin-top:6px;}
+  .related .pill{font:500 12.5px var(--sans); background:var(--bg); border:1px solid var(--border-strong); border-radius:999px; padding:4px 11px; cursor:pointer; color:var(--ink);}
+  .related .pill:hover{border-color:var(--focus); color:var(--focus);}
+
+  .chain{display:flex; flex-direction:column; gap:6px; margin:2px 0 10px;}
+  .chain .step{display:flex; align-items:baseline; gap:10px; background:var(--bg); border:1px solid var(--border); border-left:3px solid var(--teal); border-radius:8px; padding:7px 10px;}
+  .chain .step .band{font:600 11.5px var(--mono); color:var(--muted); flex:0 0 92px;}
+  .chain .step .stepcodes{font:600 13px var(--mono); color:var(--ink);}
+  table.creq{width:100%; border-collapse:collapse; margin:0 0 12px; font-size:13px;}
+  table.creq th, table.creq td{text-align:left; padding:7px 8px; border-bottom:1px solid var(--border); vertical-align:top;}
+  table.creq th{font:600 11px var(--sans); letter-spacing:.05em; text-transform:uppercase; color:var(--faint);}
+  table.creq td.code{font-family:var(--mono); font-weight:600; color:var(--ink); white-space:nowrap;}
+  table.creq tr.row-hi td{background:var(--hi);}
+
+  .docblock{border:1px solid var(--border); border-left:3px solid var(--indigo); border-radius:8px; padding:9px 12px; margin:0 0 9px;}
+  .docblock.row-hi{background:var(--hi);}
+  .docblock .dochdr{font-size:13px; color:var(--muted); margin-bottom:5px;}
+  .docblock .dochdr b{font-family:var(--mono); font-weight:600; color:var(--ink);}
+  ul.doclist{margin:0 0 6px; padding-left:18px;}
+  ul.doclist li{font-size:13px; margin:0 0 3px;}
+  .cites{font-size:11.5px; color:var(--faint); display:flex; flex-wrap:wrap; gap:4px 10px; align-items:baseline;}
+  .cites a.cite, .cites span.cite{font-size:11.5px; color:var(--focus); text-decoration:none;}
+  .cites a.cite{border-bottom:1px solid color-mix(in srgb, var(--focus) 35%, transparent);}
+  .cites a.cite:hover{border-bottom-color:var(--focus);}
+  .cites span.cite{color:var(--muted);}
+
+  .intro p{font-size:14px;}
+  .intro code, .panel code, .drawer code{font:500 12.5px var(--mono); background:var(--bg); border:1px solid var(--border); border-radius:5px; padding:1px 5px;}
+
+  .field{margin:0 0 12px;}
+  .field label{display:block; font:600 11.5px var(--sans); letter-spacing:.04em; text-transform:uppercase; color:var(--faint); margin-bottom:4px;}
+  .field input, .field textarea{width:100%; font:14px var(--sans); color:var(--ink); background:var(--bg); border:1px solid var(--border-strong); border-radius:8px; padding:8px 10px; resize:vertical;}
+  .field textarea{min-height:64px; line-height:1.5;}
+  .field .hint{font-size:11.5px; color:var(--faint); margin-top:3px;}
+  .editnote{font-size:12.5px; color:var(--muted); background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:14px;}
+
+  .drawer-backdrop{position:fixed; inset:0; background:rgba(10,15,20,.45); display:none; z-index:50;}
+  .drawer-backdrop.open{display:block;}
+  .drawer{position:fixed; top:0; right:0; height:100vh; width:min(460px,92vw); background:var(--card); border-left:1px solid var(--border); box-shadow:var(--shadow); z-index:51; transform:translateX(100%); transition:transform .2s ease; overflow:auto; padding:22px 22px 40px;}
+  .drawer.open{transform:translateX(0);}
+  @media (prefers-reduced-motion: reduce){ .drawer{transition:none;} }
+  .drawer h2{font-size:18px; font-weight:600; margin:0 0 4px;}
+  .drawer h3{font-size:12px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); margin:18px 0 7px;}
+  .drawer ul{margin:0 0 8px; padding-left:18px;}
+  .drawer li{font-size:13.5px; margin:0 0 6px;}
+  .drawer .close{position:absolute; top:14px; right:14px; width:30px; height:30px; border-radius:8px; border:1px solid var(--border-strong); background:var(--card); color:var(--muted); font-size:18px; line-height:1; cursor:pointer;}
+  .drawer .close:hover{border-color:var(--focus); color:var(--focus);}
+  .drawer .src{font-size:12.5px; color:var(--muted); margin:0 0 7px;}
+  .drawer .src a{color:var(--focus); text-decoration:none;}
+
+  footer.foot{margin-top:22px; color:var(--faint); font-size:12.5px; max-width:none;}
+  footer.foot code{font-family:var(--mono);}
+
+  /* ---- Phase 3: fork labels, status badges, prerequisites band, profile highlighter ---- */
+  .forklabel{font:700 9px var(--mono); letter-spacing:.12em; text-transform:uppercase;}
+  .fork-and{fill:var(--teal);}
+  .fork-xor{fill:var(--gray);}
+  .badge-bg{stroke:none;}
+  .badge-gated .badge-bg{fill:#fff4dd;} .badge-gated .badge-tx{fill:#8a5a00;}
+  .badge-out_of_scope .badge-bg{fill:var(--red-fill);} .badge-out_of_scope .badge-tx{fill:var(--red-ink);}
+  @media (prefers-color-scheme: dark){
+    .badge-gated .badge-bg{fill:#3a2c0a;} .badge-gated .badge-tx{fill:#f0c560;}
+  }
+  .badge-tx{font:700 8.5px var(--mono); letter-spacing:.08em;}
+  .node.dimmed{opacity:.32;}
+  .node.lit rect{stroke-width:3; filter:drop-shadow(0 0 5px color-mix(in srgb, var(--focus) 55%, transparent));}
+
+  .probar{background:var(--card); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); padding:13px 16px; margin-bottom:18px; display:flex; flex-direction:column; gap:12px;}
+  .probar .row{display:flex; flex-wrap:wrap; align-items:center; gap:9px 14px;}
+  .probar .lbl{font:600 11px var(--mono); letter-spacing:.1em; text-transform:uppercase; color:var(--faint); flex:0 0 auto; margin-right:2px;}
+  .prechip{font:600 12.5px var(--sans); color:var(--ink); background:var(--bg); border:1px solid var(--border-strong); border-radius:999px; padding:5px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:7px;}
+  .prechip:hover{border-color:var(--focus); color:var(--focus);}
+  .prechip .prcount{font:600 10.5px var(--mono); color:var(--faint); background:var(--card); border:1px solid var(--border); border-radius:999px; padding:0 6px; min-width:18px; text-align:center;}
+  .profield{display:inline-flex; align-items:center; gap:6px; font-size:12.5px; color:var(--muted);}
+  .profield select{font:13px var(--sans); color:var(--ink); background:var(--bg); border:1px solid var(--border-strong); border-radius:7px; padding:4px 8px;}
+  .profield input[type=checkbox]{width:15px; height:15px; accent-color:var(--focus); cursor:pointer;}
+  .proout{font-size:12.5px; color:var(--muted); display:flex; flex-wrap:wrap; align-items:baseline; gap:4px 8px;}
+  .proout .setcode{font:600 12px var(--mono); color:var(--teal-ink); background:var(--teal-fill); border:1px solid var(--teal); border-radius:6px; padding:1px 7px;}
+  .proout .none{color:var(--faint); font-style:italic;}
+  .proout .handoff{color:var(--faint);}
+  .probar .clearbtn{font:500 12px var(--sans); color:var(--muted); background:transparent; border:1px solid var(--border); border-radius:7px; padding:4px 10px; cursor:pointer;}
+  .probar .clearbtn:hover{border-color:var(--focus); color:var(--focus);}
+
+  .gatebadge{display:inline-block; font:700 10px var(--mono); letter-spacing:.08em; text-transform:uppercase; padding:2px 8px; border-radius:999px; margin:0 0 10px;}
+  .gatebadge.gated{background:#fff4dd; color:#8a5a00;}
+  .gatebadge.out_of_scope{background:var(--red-fill); color:var(--red-ink);}
+  .gatebadge.flag{background:var(--indigo-fill); color:var(--indigo-ink);}
+  @media (prefers-color-scheme: dark){ .gatebadge.gated{background:#3a2c0a; color:#f0c560;} }
+  .gatenote{font-size:13px; border-left:3px solid var(--border-strong); padding:6px 0 6px 11px; margin:0 0 10px; color:var(--muted);}
+  .gatenote.gated{border-left-color:#c8932e;} .gatenote.flag{border-left-color:var(--indigo);} .gatenote.out_of_scope{border-left-color:var(--red);}
+  .gatenote b{color:var(--ink);}
+
+  /* ---- Phase 4: partner overlay ---- */
+  .banner{border-radius:var(--radius); padding:11px 15px; margin-bottom:18px; font-size:13.5px; line-height:1.5; box-shadow:var(--shadow);}
+  .banner[hidden]{display:none;}
+  .banner.capitated{background:var(--red-fill); border:1px solid var(--red); color:var(--red-ink);}
+  .banner.capitated b{color:var(--red-ink);}
+  .banner .capnote{opacity:.82;}
+  table.creq td.rate{font-family:var(--mono); font-weight:600; white-space:nowrap;}
+  table.creq td.rate.not-contracted{font-weight:400; color:var(--faint);}
+  .proout .partner{font-weight:600; color:var(--ink);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <p class="eyebrow">Brook · remote patient monitoring &amp; care coordination</p>
+      <h1>CPT decision tree</h1>
+      <p>One patient, one service month — from the payment-model gate to the billed codes. Select any node for what the service covers, the billing requirements, and Brook-specific notes. Code nodes add a Completion-detail tab with per-code minimums and the time ladder.</p>
+    </div>
+    <span class="vchip" id="vchip" title="Canonical model version"></span>
+  </header>
+
+  <div class="toolbar">
+    <div class="legend" aria-label="Legend">
+      <span class="item"><span class="sw nurse"></span>Nurse clinical-staff time</span>
+      <span class="item"><span class="sw noNurse"></span>No nurse time (device / data / MD)</span>
+      <span class="item"><span class="sw decision"></span>Decision</span>
+      <span class="item"><span class="sw gated"></span>Gated</span>
+      <span class="item"><span class="sw outOfScope"></span>Out of scope</span>
+      <span class="item"><span class="sw dash"></span>Conditional path</span>
+    </div>
+    <span class="spacer"></span>
+    <div class="controls">
+      <button class="btn" id="editBtn" aria-pressed="false" title="Edit the prose for the selected node">Edit content</button>
+      <button class="btn subtle" id="rulesBtn" title="Cross-program rules and Brook gates">Rules &amp; gates</button>
+      <button class="btn subtle" id="copyBtn" title="Copy the full model as JSON">Copy JSON</button>
+      <button class="btn subtle" id="dlBtn" title="Download the full model as JSON">Download JSON</button>
+      <label class="btn subtle" for="importInput" title="Load a model JSON file">Import JSON
+        <input id="importInput" type="file" accept="application/json,.json" hidden>
+      </label>
+      <button class="btn subtle" id="resetBtn" title="Restore the built-in model">Reset</button>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+  </div>
+
+  <section class="probar" aria-label="Partner, prerequisites, and patient profile">
+    <div class="row" id="partner-field">
+      <span class="lbl">Partner</span>
+      <label class="profield">Fee schedule
+        <select id="p-partner"><option value="">All partners (canonical)</option></select>
+      </label>
+    </div>
+    <div class="row">
+      <span class="lbl">Before you can bill</span>
+      <span id="gateband" class="row" style="gap:8px;"></span>
+    </div>
+    <div class="row">
+      <span class="lbl">Patient profile</span>
+      <label class="profield">Chronic conditions
+        <select id="p-cond"><option value="0">0</option><option value="1">1</option><option value="2">2+</option></select>
+      </label>
+      <label class="profield"><input type="checkbox" id="p-mdm"> Moderate–high MDM</label>
+      <label class="profield"><input type="checkbox" id="p-qmb"> QMB</label>
+      <label class="profield"><input type="checkbox" id="p-cgm"> CGM data</label>
+      <label class="profield"><input type="checkbox" id="p-dev"> Device active</label>
+      <button class="clearbtn" id="p-clear" title="Clear the profile highlight">Clear highlight</button>
+    </div>
+    <div class="proout" id="proout"></div>
+  </section>
+
+  <div class="banner capitated" id="capbanner" role="status" hidden></div>
+
+  <div class="grid">
+    <div class="treewrap">
+      <svg class="tree" id="tree" viewBox="0 0 1040 590" preserveAspectRatio="xMidYMin meet" role="img" aria-label="Brook CPT billing decision tree">
+        <defs>
+          <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+            <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <g id="edges"></g>
+        <g id="nodes"></g>
+      </svg>
+    </div>
+
+    <aside class="panel" id="detail" aria-live="polite"></aside>
+  </div>
+
+  <div class="drawer-backdrop" id="backdrop"></div>
+  <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Rules and gates"></aside>
+
+  <footer class="foot">
+    Decision and complexity gates (condition count, complex-vs-standard CCM) are clinical inputs, not optimizer choices — the model selects only among clinically valid tracks. <span id="partner-foot-note">Rates are contracted per partner; a code absent from a partner's fee schedule is not billable. </span>This page is built from the canonical <code>cpt-model.json</code> plus the tree overlay — code facts and ladders are derived from the model, not stored here. Edit prose in place, then <code>Download JSON</code> and diff it back into the canonical file.
+  </footer>
+</div>
+
+<script id="model-data" type="application/json">{"version":"2026.2","effectiveYear":2026,"updated":"2026-06-23","mode":"informational","standardRates":{"99453":15.0,"99445":32.0,"99454":32.0,"99470":20.0,"99457":37.0,"99458":30.0,"99091":38.0,"95251":24.0,"99490":47.0,"99439":37.0,"99487":103.0,"99489":57.0,"99426":48.0,"99427":39.0,"99483":197.0,"G0506":45.0,"G0556":7.0,"G0557":22.0,"G0558":46.0},"codes":{"99453":{"label":"RPM device setup & patient education","program":"RPM","pool":"none","trigger":{"type":"event","note":"device setup and patient education complete"},"addOnOf":null,"maxUnits":1,"frequency":"once_per_episode","prereqs":["device_active"],"excludes":[],"documentation":["device_setup_log","patient_education_record","provider_order"],"citations":["cms_pfs_2026"],"status":"active"},"99454":{"label":"RPM device supply, ≥16 transmit days","program":"RPM","pool":"none","trigger":{"type":"data","minDays":16},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":["device_active","first_transmit"],"excludes":["99445"],"documentation":["device_activity_log","transmit_day_count"],"citations":["cms_pfs_2026"],"status":"active"},"99445":{"label":"RPM device supply, 2–15 transmit days","program":"RPM","pool":"none","trigger":{"type":"data","minDays":2,"maxDays":15},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":["device_active","first_transmit"],"excludes":["99454"],"documentation":["device_activity_log","transmit_day_count"],"citations":["cms_pfs_2026"],"status":"active"},"99470":{"label":"RPM clinical-staff management, 10–19 min","program":"RPM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":10},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["device_active","first_transmit","interactive_contact"],"excludes":["99457"],"documentation":["time_log","interactive_contact_log"],"citations":["cms_pfs_2026"],"status":"active"},"99457":{"label":"RPM clinical-staff management, first 20 min","program":"RPM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["device_active","first_transmit","interactive_contact"],"excludes":["99470"],"documentation":["time_log","interactive_contact_log"],"citations":["cms_pfs_2026"],"status":"active"},"99458":{"label":"RPM clinical-staff management, each additional 20 min","program":"RPM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20},"addOnOf":"99457","maxUnits":2,"frequency":"calendar_month","prereqs":["device_active","first_transmit","interactive_contact"],"excludes":[],"documentation":["time_log"],"citations":["cms_pfs_2026"],"status":"active"},"99091":{"label":"RPM data collection & interpretation, ≥30 min (physician/QHP)","program":"RPM","pool":"physician_qhp","poolMinutes":30,"trigger":{"type":"time","minMinutes":30},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":["device_active","first_transmit"],"excludes":["95251"],"documentation":["data_interpretation_note","time_log"],"citations":["cms_pfs_2026"],"status":"active"},"95251":{"label":"CGM interpretation & report, ≥72h data (physician/QHP)","program":"CGM","pool":"physician_qhp","poolMinutes":15,"trigger":{"type":"data","minHours":72},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":[],"clinicalEligibility":{"cgm":true},"excludes":["99091"],"documentation":["cgm_interpretation_report"],"citations":["cms_pfs_2026"],"status":"active"},"99490":{"label":"CCM, first 20 min","program":"CCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["consent_ccm","initiating_visit","interactive_contact"],"clinicalEligibility":{"minConditions":2,"conditionDurationMonths":12},"excludes":["program:CCM_COMPLEX","program:PCM","program:APCM","program:TCM"],"documentation":["time_log","interactive_contact_log","care_plan","consent_record"],"citations":["cms_pfs_2026","namas_ccm"],"status":"active"},"99439":{"label":"CCM, each additional 20 min","program":"CCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20},"addOnOf":"99490","maxUnits":2,"frequency":"calendar_month","prereqs":["consent_ccm","initiating_visit","interactive_contact"],"excludes":[],"documentation":["time_log"],"citations":["cms_pfs_2026","namas_ccm"],"status":"active"},"99487":{"label":"Complex CCM, first 60 min","program":"CCM_COMPLEX","pool":"clinical_staff","trigger":{"type":"time","minMinutes":60,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["consent_ccm","initiating_visit","interactive_contact"],"clinicalEligibility":{"minConditions":2,"conditionDurationMonths":12,"mdm":"moderate_high"},"excludes":["program:CCM","program:PCM","program:APCM","program:TCM"],"documentation":["time_log","interactive_contact_log","care_plan","mdm_documentation"],"citations":["cms_pfs_2026","namas_ccm"],"status":"active"},"99489":{"label":"Complex CCM, each additional 30 min","program":"CCM_COMPLEX","pool":"clinical_staff","trigger":{"type":"time","minMinutes":30},"addOnOf":"99487","maxUnits":1,"frequency":"calendar_month","prereqs":["consent_ccm","initiating_visit","interactive_contact"],"excludes":[],"documentation":["time_log"],"citations":["cms_pfs_2026","namas_ccm"],"status":"active"},"99426":{"label":"PCM, first 30 min","program":"PCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":30,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["initiating_visit","interactive_contact"],"clinicalEligibility":{"minConditions":1,"conditionDurationMonths":3,"risk":"high"},"excludes":["program:CCM","program:CCM_COMPLEX","program:APCM","program:TCM"],"documentation":["time_log","interactive_contact_log","care_plan"],"citations":["cms_pfs_2026","namas_ccm"],"status":"active"},"99427":{"label":"PCM, each additional 30 min","program":"PCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":30},"addOnOf":"99426","maxUnits":2,"frequency":"calendar_month","prereqs":["initiating_visit","interactive_contact"],"excludes":[],"documentation":["time_log"],"citations":["cms_pfs_2026","namas_ccm"],"status":"active"},"99483":{"label":"Cognitive assessment & care plan, ~50 min (physician/QHP)","program":"COG","pool":"physician_qhp","poolMinutes":50,"trigger":{"type":"time","minMinutes":50},"addOnOf":null,"maxUnits":1,"frequency":"per_180_days","prereqs":["established_patient"],"excludes":[],"documentation":["cognitive_assessment_record","care_plan"],"citations":["cms_pfs_2026"],"status":"active"},"G0506":{"label":"CCM initiating-visit add-on (physician/QHP)","program":"CCM","pool":"physician_qhp","poolMinutes":30,"trigger":{"type":"event","note":"comprehensive care-planning at CCM initiation"},"addOnOf":null,"maxUnits":1,"frequency":"once_per_patient","prereqs":["consent_ccm","initiating_visit"],"excludes":["program:PCM","program:APCM"],"documentation":["care_plan","consent_record"],"citations":["cms_pfs_2026"],"status":"active"},"G0556":{"label":"APCM level 1 (≤1 chronic condition)","program":"APCM","pool":"physician_qhp","poolMinutes":0,"trigger":{"type":"flat"},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["consent_apcm","initiating_visit"],"clinicalEligibility":{"maxConditions":1},"excludes":["program:CCM","program:CCM_COMPLEX","program:PCM","program:TCM"],"documentation":["consent_record","service_element_log"],"citations":["cms_pfs_2026","aafp_apcm"],"status":"gated"},"G0557":{"label":"APCM level 2 (2+ chronic conditions)","program":"APCM","pool":"physician_qhp","poolMinutes":0,"trigger":{"type":"flat"},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["consent_apcm","initiating_visit"],"clinicalEligibility":{"minConditions":2},"excludes":["program:CCM","program:CCM_COMPLEX","program:PCM","program:TCM"],"documentation":["consent_record","service_element_log"],"citations":["cms_pfs_2026","aafp_apcm"],"status":"gated"},"G0558":{"label":"APCM level 3 (2+ chronic conditions & QMB)","program":"APCM","pool":"physician_qhp","poolMinutes":0,"trigger":{"type":"flat"},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["consent_apcm","initiating_visit"],"clinicalEligibility":{"minConditions":2,"qmb":true},"excludes":["program:CCM","program:CCM_COMPLEX","program:PCM","program:TCM"],"documentation":["consent_record","service_element_log","qmb_verification"],"citations":["cms_pfs_2026","aafp_apcm"],"status":"gated"},"99495":{"label":"Transitional Care Management, moderate complexity","program":"TCM","pool":"clinical_staff","trigger":{"type":"event","note":"post-discharge transition; contact within 2 business days, face-to-face within 14 days"},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":["interactive_contact"],"excludes":["program:CCM","program:CCM_COMPLEX","program:PCM","program:APCM"],"documentation":["discharge_summary","interactive_contact_log","face_to_face_visit"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"99496":{"label":"Transitional Care Management, high complexity","program":"TCM","pool":"clinical_staff","trigger":{"type":"event","note":"post-discharge transition; contact within 2 business days, face-to-face within 7 days"},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":["interactive_contact"],"excludes":["program:CCM","program:CCM_COMPLEX","program:PCM","program:APCM"],"documentation":["discharge_summary","interactive_contact_log","face_to_face_visit"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"98975":{"label":"RTM setup & patient education","program":"RTM","pool":"none","trigger":{"type":"event","note":"device setup and patient education complete"},"addOnOf":null,"maxUnits":1,"frequency":"once_per_episode","prereqs":[],"excludes":[],"documentation":["device_setup_log","patient_education_record"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"98976":{"label":"RTM device supply, respiratory system, ≥16 days","program":"RTM","pool":"none","trigger":{"type":"data","minDays":16},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":[],"excludes":[],"documentation":["device_activity_log","transmit_day_count"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"98977":{"label":"RTM device supply, musculoskeletal system, ≥16 days","program":"RTM","pool":"none","trigger":{"type":"data","minDays":16},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":[],"excludes":[],"documentation":["device_activity_log","transmit_day_count"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"98978":{"label":"RTM device supply, cognitive behavioral therapy, ≥16 days","program":"RTM","pool":"none","trigger":{"type":"data","minDays":16},"addOnOf":null,"maxUnits":1,"frequency":"per_30_days","prereqs":[],"excludes":[],"documentation":["device_activity_log","transmit_day_count"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"98980":{"label":"RTM treatment management, first 20 min","program":"RTM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":["interactive_contact"],"excludes":[],"documentation":["time_log","interactive_contact_log"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"98981":{"label":"RTM treatment management, each additional 20 min","program":"RTM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20},"addOnOf":"98980","maxUnits":2,"frequency":"calendar_month","prereqs":["interactive_contact"],"excludes":[],"documentation":["time_log"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"99484":{"label":"Behavioral health integration, ≥20 min clinical staff","program":"BHI","pool":"clinical_staff","trigger":{"type":"time","minMinutes":20},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["time_log","care_plan"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"99492":{"label":"Psychiatric CoCM, initial month, first 70 min","program":"COCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":70,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["time_log","care_plan","psychiatric_consult_log"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"99493":{"label":"Psychiatric CoCM, subsequent month, first 60 min","program":"COCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":60,"first":true},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["time_log","care_plan","psychiatric_consult_log"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"99494":{"label":"Psychiatric CoCM, each additional 30 min","program":"COCM","pool":"clinical_staff","trigger":{"type":"time","minMinutes":30},"addOnOf":"99493","maxUnits":2,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["time_log"],"citations":["cms_pfs_2026"],"status":"out_of_scope"},"G0568":{"label":"APCM behavioral health integration add-on (2026)","program":"BHI","pool":"clinical_staff","trigger":{"type":"flat"},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["care_plan"],"citations":["cms_pfs_2026","aafp_apcm"],"status":"out_of_scope"},"G0569":{"label":"APCM psychiatric CoCM add-on, first 60 min (2026)","program":"BHI","pool":"clinical_staff","trigger":{"type":"flat"},"addOnOf":null,"maxUnits":1,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["care_plan","psychiatric_consult_log"],"citations":["cms_pfs_2026","aafp_apcm"],"status":"out_of_scope"},"G0570":{"label":"APCM psychiatric CoCM add-on, each additional 30 min (2026)","program":"BHI","pool":"clinical_staff","trigger":{"type":"flat"},"addOnOf":"G0569","maxUnits":2,"frequency":"calendar_month","prereqs":[],"excludes":[],"documentation":["care_plan"],"citations":["cms_pfs_2026","aafp_apcm"],"status":"out_of_scope"}},"ladders":{"RPM_MGMT":{"pool":"clinical_staff","group":null,"steps":[{"cumMinutes":10,"codes":["99470"]},{"cumMinutes":20,"codes":["99457"]},{"cumMinutes":40,"codes":["99457","99458"]},{"cumMinutes":60,"codes":["99457","99458","99458"]}]},"CCM":{"pool":"clinical_staff","group":"care_mgmt","steps":[{"cumMinutes":20,"codes":["99490"]},{"cumMinutes":40,"codes":["99490","99439"]},{"cumMinutes":60,"codes":["99490","99439","99439"]}]},"CCM_COMPLEX":{"pool":"clinical_staff","group":"care_mgmt","steps":[{"cumMinutes":60,"codes":["99487"]},{"cumMinutes":90,"codes":["99487","99489"]}]},"PCM":{"pool":"clinical_staff","group":"care_mgmt","steps":[{"cumMinutes":30,"codes":["99426"]},{"cumMinutes":60,"codes":["99426","99427"]},{"cumMinutes":90,"codes":["99426","99427","99427"]}]},"APCM":{"pool":"physician_qhp","group":"care_mgmt","codes":["G0556","G0557","G0558"],"flat":"Tier-selected flat monthly bundle: G0556 (≤1 condition), G0557 (2+ conditions), G0558 (2+ & QMB). No time threshold; ~0 marginal nurse time; runs concurrently with RPM. Gated by D2_apcm."},"RPM_DATA":{"pool":"physician_qhp","codes":["99091"],"flat":"99091 — physician/QHP RPM data collection & interpretation, ≥30 min per 30 days. Concurrency with 99457 is payer-dependent (D4_99091_concurrency)."},"CGM":{"pool":"physician_qhp","codes":["95251"],"flat":"95251 — CGM interpretation & report of ≥72h data, once per calendar month. Mutually exclusive with 99091."},"COG":{"pool":"physician_qhp","codes":["99483"],"flat":"99483 — cognitive assessment & care plan, ~50 min, once per 180 days per provider."},"CCM_INIT":{"pool":"physician_qhp","requires_any":["CCM","CCM_COMPLEX"],"codes":["G0506"],"flat":"G0506 — CCM initiating-visit add-on, once per patient. Requires an active CCM or complex-CCM track; never attaches to PCM or APCM."},"DEVICE":{"pool":"none","codes":["99453","99454","99445"],"flat":"99453 one-time setup; 99454 (≥16 transmit days) or 99445 (2–15 days) recurring per 30 days, mutually exclusive. No nurse minutes."},"TCM":{"pool":"clinical_staff","group":"TCM","codes":["99495","99496"],"flat":"99495/99496 — Transitional Care Management. Out of scope: no representative rate in the 2026 fee schedule. Mutually exclusive with all care-management tracks."},"RTM":{"pool":"clinical_staff","codes":["98975","98976","98977","98978","98980","98981"],"flat":"Remote Therapeutic Monitoring (MSK / respiratory / CBT). Out of scope: out of scope in this representative reference. Parallel to RPM; gated by D7_rtm until confirmed."},"BHI":{"pool":"clinical_staff","codes":["99484","G0568","G0569","G0570"],"flat":"Behavioral Health Integration, incl. the 2026 APCM behavioral add-ons G0568–G0570. Out of scope: out of scope in this representative reference. Gated by D8_bhi_cocm."},"COCM":{"pool":"clinical_staff","codes":["99492","99493","99494"],"flat":"Psychiatric Collaborative Care Management. Out of scope: out of scope in this representative reference. Gated by D8_bhi_cocm."}},"groups":{"care_mgmt":{"members":["CCM","CCM_COMPLEX","PCM","APCM"],"exclusiveWith":["TCM"],"selectAtMost":1},"TCM":{"members":["TCM"],"exclusiveWith":["care_mgmt"],"selectAtMost":1}},"prereqs":{"consent_ccm":{"label":"CCM consent on file","note":"Separate from APCM consent"},"consent_apcm":{"label":"APCM consent on file"},"initiating_visit":{"label":"Initiating visit (AWV qualifies)"},"established_patient":{"label":"Established patient"},"device_active":{"label":"Connected device issued and active"},"first_transmit":{"label":"First qualifying transmission recorded"},"interactive_contact":{"label":"Real-time synchronous contact this month"}},"gates":{"D2_apcm":{"applies":"APCM","status":"gated","reason":"Billing APCM requires Brook to report the Value in Primary Care MVP and participate in a qualifying model (MSSP ACO, REACH ACO, Making Care Primary, or Primary Care First). Unconfirmed, so APCM_AVAILABLE defaults off until verified."},"D4_99091_concurrency":{"applies":"99091","status":"flag","reason":"Concurrency of 99091 with 99457 is payer-dependent; currently modeled as concurrent."},"D7_rtm":{"applies":"RTM","status":"out_of_scope","reason":"RTM (98975–98981) is out of scope in this representative reference; authored as a scoped-out placeholder until contracting is confirmed (spec section 6)."},"D8_bhi_cocm":{"applies":"BHI","status":"out_of_scope","reason":"BHI / CoCM (99484, 99492–99494, G0568–G0570) is out of scope in this representative reference; authored as a scoped-out placeholder until behavioral health is in Brook's book (spec section 6)."}},"sources":{"cms_pfs_2026":{"title":"CY2026 Medicare Physician Fee Schedule final rule","url":"https://www.federalregister.gov/documents/2025/cms-1832-f","accessed":"2026-06"},"cms_1832_f":{"title":"CMS-1832-F CY2026 PFS final rule (data/2025-19787.pdf)","url":"data/2025-19787.pdf","accessed":"2026-06"},"namas_ccm":{"title":"NAMAS — CCM vs PCM vs complex CCM coding guidance","url":"https://namas.co/","accessed":"2026-06"},"aafp_apcm":{"title":"AAFP — Advanced Primary Care Management (APCM) G0556–G0558","url":"https://www.aafp.org/","accessed":"2026-06"}},"_note":"Public build of cpt-model.json, generated by artifact/build.py --public. Partner-contracted rates and Brook contracting detail are redacted; standardRates are representative CY2026 Medicare PFS amounts. Do not edit by hand.","tree":{"nodes":[{"id":"patient","kind":"start","title":"Patient","sub":"service month","x":435,"y":24,"w":170,"h":54,"detail":{"what":"A single patient in one calendar month. Every billable CPT or HCPCS line for that patient-month is decided by walking this tree.","requirements":[],"brook":"Scope is one patient, one month. The optimizer evaluates the whole fee-for-service panel patient by patient under a shared nurse-minute budget."},"related":["payment"]},{"id":"payment","kind":"decision","title":"Payment model?","sub":"FFS or capitated","x":430,"y":108,"w":180,"h":58,"detail":{"routing":"Branch on the patient's partner contract. Capitated contracts pay a fixed amount per member or patient per month regardless of services, so completing codes earns no marginal revenue and those patients leave the tree. Fee-for-service contracts pay per code and continue.","requirements":["Contracted rates vary by partner.","A code that is not on a partner's fee schedule is not billable for that patient — treat it as $0."],"brook":"Each code shows a representative CPT reimbursement rate (CY2026 Medicare PFS basis). Actual reimbursement varies by payer and contract."},"related":["capitated","ffs"]},{"id":"capitated","kind":"outOfScope","title":"Capitated","sub":"out of scope","x":120,"y":108,"w":210,"h":54,"detail":{"what":"Partners paid a fixed per-member or per-patient amount per month, independent of CPT volume.","requirements":["No per-code billing.","Marginal CPT capture is $0."],"brook":"Some arrangements are capitated — paid per member or per patient rather than per CPT code. Under capitation the marginal value of additional CPT capture is $0, so these panels are best managed on engagement, outcomes, and retention rather than code completion."},"related":["payment"]},{"id":"ffs","kind":"start","forkType":"and","title":"Fee-for-service","sub":"evaluate all buckets","x":435,"y":196,"w":170,"h":54,"detail":{"what":"Partner pays per completed code. All four buckets below may run in the same month; only the care-management track is internally single-select.","requirements":["Each code keeps its own clinical and time or eligibility gate.","Each code must be on the partner's contracted schedule."],"brook":"This is the universe the optimizer maximizes over: RPM device, RPM management, exactly one care-management track, and physician or QHP add-ons."},"related":["rpmDevice","rpmMgmt","careGate","physician"]},{"id":"rpmDevice","kind":"noNurse","ladderRefs":["DEVICE"],"title":"RPM device & setup","x":60,"y":296,"w":190,"h":62,"detail":{"what":"Codes tied to the connected device and data transmission, not to clinical-staff time. Bill setup once at onboarding, then the monthly device-supply code that matches transmit-day count.","requirements":["99453 once per episode at setup.","99454 needs ≥16 days of transmission in 30 days; 99445 covers 2–15 days at the same 2026 rate.","99454 and 99445 are mutually exclusive in a month.","Requires an active patient and a billing-provider order."],"brook":"Data-gated, not nurse-gated — this revenue does not consume the clinical-staff bottleneck and should always be captured when transmit thresholds are met. Modeled as flat setup and device revenue scaled by transmission probability."},"related":["rpmMgmt"]},{"id":"rpmMgmt","kind":"nurse","ladderRefs":["RPM_MGMT"],"title":"RPM management","x":290,"y":296,"w":190,"h":62,"detail":{"what":"Clinical-staff time spent managing RPM data and communicating with the patient, billed as a mutually exclusive ladder by cumulative minutes.","requirements":["99470 for 10–19 minutes; at 20 minutes bill 99457 instead, not in addition — they are mutually exclusive.","99458 adds each further 20 minutes on top of 99457.","Requires at least one real-time interactive contact with the patient that month."],"brook":"This is the binding resource: every minute draws on nurse capacity. The optimizer climbs the ladder only while marginal $/nurse-minute beats the shadow price. Concurrent with one <a class=\"xref\" data-node=\"careGate\">care-management track<\/a> and with <a class=\"xref\" data-node=\"physician\">physician add-ons<\/a>."},"related":["rpmDevice","careGate","physician"]},{"id":"careGate","kind":"decision","forkType":"xor","title":"Care management","sub":"how many conditions?","x":520,"y":296,"w":200,"h":58,"detail":{"routing":"Branch on chronic-condition count and complexity. One condition routes to PCM or APCM level 1; two or more routes to CCM, complex CCM, or APCM levels 2–3. Exactly one track may bill per patient per month.","requirements":["CCM, complex CCM, PCM, and APCM are mutually exclusive care-management services — the management time cannot be double-counted across them.","RPM is separate and runs concurrently with the chosen track."],"brook":"Modeled as the <code>care_mgmt<\/code> group: at most one ladder selected across all four tracks. The live economic decision is time-based track versus flat <a class=\"xref\" data-node=\"apcm\">APCM<\/a>, plus how far to climb. Complexity (standard vs complex CCM) must be gated upstream in <code>build_ladders<\/code> so the optimizer never picks complex-vs-standard on revenue alone."},"related":["oneCond","twoPlusCond"]},{"id":"physician","kind":"noNurse","ladderRefs":["RPM_DATA","CGM","COG","CCM_INIT"],"title":"Physician / QHP add-ons","x":775,"y":296,"w":210,"h":62,"detail":{"what":"Codes billed on the physician or qualified-health-professional pool, concurrent with the nurse-driven programs and not drawing on clinical-staff minutes.","requirements":["99091: ≥30 min of physician/QHP data interpretation; concurrency with 99457 is payer-dependent (decision gate D4, currently modeled as concurrent).","95251: interpretation of ≥72 hours of CGM data, once per month; cannot bill with 99091.","99483: cognitive or dementia assessment, ~50 min, once per 180 days.","G0506: care-plan add-on billed once at the start of a CCM track."],"brook":"Separate capacity pool — modeled as uncapped unless physician time is constrained. G0506 carries a <code>requires_any<\/code> dependency on an active <a class=\"xref\" data-node=\"ccm\">CCM<\/a> or <a class=\"xref\" data-node=\"complexCcm\">complex CCM<\/a> track and cannot bill without one; it does not attach to PCM or APCM."},"related":["ccm","complexCcm","rpmMgmt"]},{"id":"oneCond","kind":"decision","forkType":"xor","title":"1 condition","x":395,"y":410,"w":170,"h":48,"detail":{"routing":"A single serious, high-risk chronic condition. Options: PCM (clinical-staff time) or APCM level 1 (flat).","requirements":["PCM requires one complex chronic condition expected to last at least 3 months and placing the patient at significant risk."],"brook":"The tradeoff is PCM ($/nurse-minute) against APCM level 1 (G0556, flat). Low engagement usually routes to APCM."},"related":["pcm","apcm"]},{"id":"twoPlusCond","kind":"decision","forkType":"xor","title":"2+ conditions","x":695,"y":410,"w":170,"h":48,"detail":{"routing":"Two or more chronic conditions expected to last at least 12 months. Options: standard CCM, complex CCM (when MDM is moderate-to-high), or APCM levels 2–3.","requirements":["Standard versus complex CCM is determined by documented complexity of medical decision-making and care-plan work, not by the optimizer."],"brook":"Offer only the clinically correct CCM variant per patient. If both standard and complex CCM enter the candidate set together, the group constraint picks the higher-revenue ladder — at 60 minutes standard CCM ($121) outpays complex ($103) — which is wrong when documentation requires complex coding."},"related":["ccm","complexCcm","apcm"]},{"id":"pcm","kind":"nurse","ladderRefs":["PCM"],"title":"PCM","x":255,"y":500,"w":160,"h":62,"detail":{"what":"Principal care management — management of a single high-risk chronic condition by clinical staff.","requirements":["99426 for the first 30 minutes of clinical-staff time in a month; 99427 for each additional 30 minutes (capped at 2 in the model).","One qualifying condition; live interactive contact required that month.","99427 unlocks only at 60+ cumulative minutes.","Mutually exclusive with CCM and APCM."],"brook":"Nurse-time ladder. Selected when its engagement-scaled $/nurse-minute clears the shadow price over the <a class=\"xref\" data-node=\"apcm\">APCM<\/a> level 1 fallback."},"related":["ccm","apcm","oneCond"]},{"id":"apcm","kind":"noNurse","ladderRefs":["APCM"],"title":"APCM","x":470,"y":500,"w":170,"h":62,"detail":{"what":"Advanced primary care management — a flat monthly care bundle with no minute threshold, tiered by patient complexity.","requirements":["G0556 for one or fewer chronic conditions; G0557 for two or more; G0558 for two or more who are also a Qualified Medicare Beneficiary (QMB).","No time accrual required; consent and an initiating visit required, plus capability to deliver 13 service elements.","Mutually exclusive with CCM, complex CCM, PCM, and TCM; concurrent with RPM."],"brook":"Conditional on the practice meeting CMS APCM participation requirements (a Value in Primary Care MVP plus a qualifying ACO or model) — decision gate D2, not yet confirmed for Brook, so APCM is gated off by default (<code>APCM_AVAILABLE<\/code>). Draws ~0 nurse minutes, so the optimizer cashes out low-engagement patients here to free clinical-staff capacity."},"related":["ccm","complexCcm","pcm"]},{"id":"ccm","kind":"nurse","ladderRefs":["CCM"],"title":"CCM","x":690,"y":500,"w":160,"h":62,"detail":{"what":"Chronic care management — standard management of two or more chronic conditions by clinical staff.","requirements":["99490 for the first 20 minutes; 99439 for each additional 20 (capped at 2 in the model).","Two or more conditions expected ≥12 months; live interactive contact required.","99439 unlocks at 40+ minutes (unit 1) and 60+ minutes (unit 2).","Mutually exclusive with complex CCM, PCM, and APCM."],"brook":"Nurse-time ladder, the most common 2+ track. New-to-CCM patients also trigger the G0506 initiation add-on — see <a class=\"xref\" data-node=\"physician\">physician add-ons<\/a>."},"related":["complexCcm","apcm","physician"]},{"id":"complexCcm","kind":"nurse","ladderRefs":["CCM_COMPLEX"],"title":"Complex CCM","x":860,"y":500,"w":170,"h":62,"detail":{"what":"Chronic care management for patients whose care requires moderate-to-high complexity medical decision-making and substantial care-plan work.","requirements":["99487 for the first 60 minutes; 99489 for each additional 30.","Requires documented moderate-to-high MDM and establishment or substantial revision of a comprehensive care plan.","99489 unlocks at 90+ cumulative minutes.","Replaces standard CCM; mutually exclusive with PCM and APCM."],"brook":"Clinically gated: bill only when complexity criteria are met. At equal minutes standard CCM can out-pay complex, so the choice must be set by clinical documentation upstream, not by the optimizer."},"related":["ccm","apcm","twoPlusCond"]}],"edges":[{"from":"patient","to":"payment","kind":"v"},{"from":"payment","to":"capitated","kind":"h"},{"from":"payment","to":"ffs","kind":"v"},{"from":"ffs","to":"rpmDevice","kind":"bus","busY":274},{"from":"ffs","to":"rpmMgmt","kind":"bus","busY":274},{"from":"ffs","to":"careGate","kind":"bus","busY":274},{"from":"ffs","to":"physician","kind":"bus","busY":274},{"from":"careGate","to":"oneCond","kind":"bus","busY":384},{"from":"careGate","to":"twoPlusCond","kind":"bus","busY":384},{"from":"oneCond","to":"pcm","kind":"bus","busY":480},{"from":"oneCond","to":"apcm","kind":"bus","busY":480,"style":"dashed"},{"from":"twoPlusCond","to":"ccm","kind":"bus","busY":486},{"from":"twoPlusCond","to":"complexCcm","kind":"bus","busY":486},{"from":"twoPlusCond","to":"apcm","kind":"bus","busY":486,"style":"dashed"}],"rules":{"groups":[{"title":"Exclusivity & dependencies","items":["One care-management track per patient per month: CCM, complex CCM, PCM, and APCM are mutually exclusive and all exclude TCM.","RPM device and RPM management run concurrently with the chosen care track and with the physician add-ons.","Device: <code>99454<\/code> and <code>99445<\/code> are mutually exclusive (transmit-day count decides). <code>99453<\/code> bills once at setup.","Management: <code>99470<\/code> and <code>99457<\/code> are mutually exclusive. <code>99458<\/code> requires <code>99457<\/code>, never <code>99470<\/code>.","<code>G0506<\/code> requires an active CCM track (standard or complex). Never with PCM or APCM.","<code>95251<\/code> and <code>99091<\/code> are mutually exclusive in the same period.","All time-based codes count only distinct, non-overlapping minutes across programs."]},{"title":"Brook gates & modeling","items":["Nurse-time ladders the optimizer rations: 99470/99457/99458, 99490/99439, 99487/99489, 99426/99427. Cumulative unlock points (40, 60, 90 min) are the operating-point boundaries.","Zero-nurse-minute revenue, captured whenever eligible: device codes and the physician-pool codes.","APCM gate (D2): requires Value in Primary Care MVP reporting plus a qualifying model (MSSP ACO, REACH ACO, Making Care Primary, or Primary Care First). Unconfirmed — <code>APCM_AVAILABLE<\/code> defaults off.","99091 + 99457 concurrency (D4): payer-dependent, modeled as concurrent.","Complex-vs-standard CCM is a clinical determination. Offer only the correct ladder upstream, or the group constraint takes the higher-revenue option (standard out-pays complex at equal minutes).","Capitated arrangements are out of scope, with no marginal CPT revenue."]}]}}}</script>
+<script>
+"use strict";
+const clone = (o) => JSON.parse(JSON.stringify(o));
+const MODEL = JSON.parse(document.getElementById("model-data").textContent);
+// Public build redacts MODEL.partners; the partner overlay UI is shown only when partners exist.
+const HAS_PARTNERS = Object.keys((MODEL && MODEL.partners) || {}).length > 0;
+
+let data = clone(MODEL);
+let selected = null;
+let editing = false;
+let activeTab = "summary";
+let pendingHiCode = null;
+let litSet = null;   // Set of lit node ids when an overlay (partner and/or profile) is active; null = inactive
+let selectedPartner = null;   // partner key, or null = "All partners (canonical)" -> standardRates. View state, never persisted.
+let profileActive = false;    // true once the patient-profile highlighter is engaged
+const profile = { conditions: 0, mdm: false, qmb: false, cgm: false, device: false };
+
+const elNodes = document.getElementById("nodes");
+const elEdges = document.getElementById("edges");
+const elDetail = document.getElementById("detail");
+const elStatus = document.getElementById("status");
+const backdropEl = document.getElementById("backdrop");
+const drawerEl = document.getElementById("drawer");
+const rulesBtn = document.getElementById("rulesBtn");
+const vchipEl = document.getElementById("vchip");
+
+const tree = () => data.tree || { nodes: [], edges: [], rules: { groups: [] } };
+const byId = (id) => tree().nodes.find(n => n.id === id);
+const cx = (n) => n.x + n.w / 2;
+const esc = (s) => String(s == null ? "" : s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+const escAttr = (s) => esc(s).replace(/"/g,"&quot;");
+
+/* ---- model derivation: tree nodes reference ladders; code/chain facts come from MODEL ---- */
+/* frequency reframed as "Billable again when" — the cadence reset rule (spec 3.2) */
+const CADENCE_LABEL = {
+  once_per_episode: "Not again this episode",
+  once_per_patient: "Once per patient, per provider",
+  per_30_days: "After 30 days",
+  calendar_month: "Next calendar month",
+  per_180_days: "After 180 days",
+};
+
+/* documentation tokens -> defensible-claim labels (presentation map, like CADENCE_LABEL) */
+const DOC_LABEL = {
+  time_log: "Time log",
+  interactive_contact_log: "Interactive-contact log (date & method)",
+  care_plan: "Care plan",
+  consent_record: "Consent record",
+  device_activity_log: "Device activity log",
+  device_setup_log: "Device setup log",
+  data_interpretation_note: "Data interpretation note",
+  cgm_interpretation_report: "CGM interpretation report",
+  cognitive_assessment_record: "Cognitive assessment record",
+  discharge_summary: "Discharge summary",
+  face_to_face_visit: "Face-to-face visit",
+  patient_education_record: "Patient education record",
+  provider_order: "Provider order",
+  psychiatric_consult_log: "Psychiatric consult log",
+  qmb_verification: "QMB verification",
+  service_element_log: "Service-element log",
+  transmit_day_count: "Transmit-day count",
+  mdm_documentation: "MDM documentation",
+};
+const docLabel = (tok) => DOC_LABEL[tok] || tok.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+
+function ladder(name){ return (data.ladders || {})[name]; }
+function codeRec(id){ return (data.codes || {})[id] || {}; }
+
+/* ---- Phase 4: partner overlay — rate card is the selected partner's rates, else canonical standardRates ---- */
+function selectedPartnerRec(){ return selectedPartner ? (data.partners || {})[selectedPartner] : null; }
+function isCapitated(){ const p = selectedPartnerRec(); return !!(p && p.scope === "capitated"); }
+function rateCard(){
+  if(!selectedPartner) return data.standardRates || null;   // "All partners (canonical)"
+  const p = selectedPartnerRec();
+  return p && p.rates ? p.rates : null;                     // capitated partners have no rate card
+}
+function contracted(code){ const rc = rateCard(); return !!(rc && rc[code] != null); }
+function rateOf(code){ const rc = rateCard(); return rc && rc[code] != null ? rc[code] : null; }
+function fmtRate(v){ return "$" + (Number.isInteger(v) ? String(v) : v.toFixed(2)); }
+
+function ladderCodeIds(name){
+  const L = ladder(name);
+  if(!L) return [];
+  const out = [];
+  if(L.steps){ L.steps.forEach(s => s.codes.forEach(c => { if(!out.includes(c)) out.push(c); })); }
+  else { (L.codes || []).forEach(c => { if(!out.includes(c)) out.push(c); }); }
+  return out;
+}
+
+function nodeCodeIds(n){
+  const out = [];
+  (n.ladderRefs || []).forEach(r => ladderCodeIds(r).forEach(c => { if(!out.includes(c)) out.push(c); }));
+  return out;
+}
+
+function billsAt(id){
+  const c = codeRec(id); const t = c.trigger || {};
+  if(t.type === "time"){
+    if(c.addOnOf) return "+" + t.minMinutes + " min each";
+    return "≥" + t.minMinutes + " min" + (t.first ? " (first " + t.minMinutes + ")" : "");
+  }
+  if(t.type === "data"){
+    if(t.minHours != null) return "≥" + t.minHours + " hrs data";
+    if(t.maxDays != null) return t.minDays + "–" + t.maxDays + " transmit days / 30d";
+    return "≥" + t.minDays + " transmit days / 30d";
+  }
+  if(t.type === "event") return t.note || "At qualifying event";
+  if(t.type === "flat") return "Flat — no time threshold";
+  return "—";
+}
+
+function excludesText(id){
+  const c = codeRec(id);
+  if(!c.excludes || !c.excludes.length) return "";
+  return c.excludes.map(tok =>
+    tok.startsWith("program:") ? tok.slice(8) + " track"
+    : tok.startsWith("group:") ? tok.slice(6)
+    : tok
+  ).join(", ");
+}
+
+function derivedCodes(n){
+  return nodeCodeIds(n).map(id => {
+    const c = codeRec(id);
+    return { code:id, label:c.label || "", min:billsAt(id), cadence:CADENCE_LABEL[c.frequency] || "—",
+             stacks:c.addOnOf || "", excludes:excludesText(id),
+             documentation:c.documentation || [], citations:c.citations || [],
+             rate:rateOf(id) };
+  });
+}
+
+function citationLinks(ids){
+  const src = data.sources || {};
+  return (ids || []).map(id => {
+    const s = src[id];
+    if(!s) return "";
+    const title = esc(s.title || id);
+    return s.url
+      ? '<a class="cite" href="' + escAttr(s.url) + '" target="_blank" rel="noopener">' + title + '</a>'
+      : '<span class="cite">' + title + '</span>';
+  }).filter(Boolean).join("");
+}
+
+function bandLabel(steps, i){
+  const cur = steps[i].cumMinutes;
+  return (i + 1 < steps.length) ? (cur + "–" + (steps[i + 1].cumMinutes - 1) + " min") : (cur + "+ min");
+}
+function stepCodesLabel(codes){
+  const runs = [];
+  codes.forEach(c => {
+    const last = runs[runs.length - 1];
+    if(last && last.code === c) last.n++; else runs.push({ code:c, n:1 });
+  });
+  return runs.map(x => x.n > 1 ? (x.code + " ×" + x.n) : x.code).join(" + ");
+}
+function derivedChain(n){
+  for(const r of (n.ladderRefs || [])){
+    const L = ladder(r);
+    if(L && L.steps) return L.steps.map((s, i) => ({ band:bandLabel(L.steps, i), codes:stepCodesLabel(s.codes) }));
+  }
+  return null;
+}
+function derivedFlat(n){
+  const notes = (n.ladderRefs || []).map(ladder).filter(L => L && L.flat && !L.steps).map(L => L.flat);
+  return notes.length ? notes.join(" ") : null;
+}
+const codeStr = (n) => nodeCodeIds(n).join("·");
+
+/* ---- Phase 3: status, gates, fork semantics, prerequisites, profile highlighter ---- */
+const FORK_LABEL = { and: "ALL THAT APPLY", xor: "CHOOSE ONE" };
+
+/* node status = worst status across its codes (gated outranks active; all-out_of_scope => out_of_scope) */
+function nodeStatus(n){
+  const ids = nodeCodeIds(n);
+  if(!ids.length) return n.kind === "outOfScope" ? "out_of_scope" : null;
+  const st = ids.map(id => codeRec(id).status || "active");
+  if(st.every(s => s === "out_of_scope")) return "out_of_scope";
+  if(st.some(s => s === "gated")) return "gated";
+  return "active";
+}
+function programsOf(n){
+  const set = new Set();
+  nodeCodeIds(n).forEach(id => { const p = codeRec(id).program; if(p) set.add(p); });
+  return set;
+}
+/* gates whose `applies` matches one of the node's codes or programs (e.g. D2->APCM, D4->99091) */
+function gatesForNode(n){
+  const gates = data.gates || {};
+  const ids = new Set(nodeCodeIds(n));
+  const progs = programsOf(n);
+  return Object.keys(gates).map(id => Object.assign({ id }, gates[id]))
+    .filter(g => ids.has(g.applies) || progs.has(g.applies));
+}
+
+/* prereq id -> [code ids that require it] */
+function prereqCodeMap(){
+  const map = {};
+  Object.keys(data.prereqs || {}).forEach(p => { map[p] = []; });
+  Object.keys(data.codes || {}).forEach(cid => {
+    (codeRec(cid).prereqs || []).forEach(p => { (map[p] = map[p] || []).push(cid); });
+  });
+  return map;
+}
+function nodesRequiringPrereq(pid){
+  return tree().nodes.filter(n => nodeCodeIds(n).some(id => (codeRec(id).prereqs || []).includes(pid))).map(n => n.id);
+}
+
+/* profile highlighter — rules-only billability for a clinical profile (not a recommendation) */
+function codeEligible(cid, p){
+  const c = codeRec(cid);
+  if((c.status || "active") !== "active") return false;            // gated / out_of_scope are not billable
+  if(c.addOnOf && !codeEligible(c.addOnOf, p)) return false;       // an add-on inherits its base code's gates
+  const e = c.clinicalEligibility || {};
+  if(e.minConditions != null && p.conditions < e.minConditions) return false;
+  if(e.maxConditions != null && p.conditions > e.maxConditions) return false;
+  if(e.mdm === "moderate_high" && !p.mdm) return false;
+  if(e.qmb && !p.qmb) return false;
+  if(e.cgm && !p.cgm) return false;
+  if((c.prereqs || []).includes("device_active") && !p.device) return false;  // device/data codes gate on the device toggle
+  return true;
+}
+/* codes billable under the active overlays: contracted by the partner (if one is picked)
+   AND clinically eligible for the profile (if engaged). Either clause is skipped when its
+   overlay is inactive; the canonical "All partners" partner does not filter on contract. */
+function billableCodeSet(){
+  const partnerActive = !!selectedPartner && !isCapitated();
+  const set = new Set(Object.keys(data.codes || {}).filter(cid =>
+    (codeRec(cid).status || "active") === "active" &&        // gated / out_of_scope are never billable (spec §2)
+    (!partnerActive || contracted(cid)) &&
+    (!profileActive || codeEligible(cid, profile))));
+  // ladder requires_any: drop a ladder's codes when no prerequisite ladder has an eligible code
+  // (e.g. G0506 in CCM_INIT needs a live CCM / complex-CCM track — also dropped if the partner
+  //  doesn't contract the base CCM codes)
+  Object.keys(data.ladders || {}).forEach(ln => {
+    const L = ladder(ln);
+    if(L && L.requires_any && L.requires_any.length){
+      const ok = L.requires_any.some(rl => ladderCodeIds(rl).some(c => set.has(c)));
+      if(!ok) ladderCodeIds(ln).forEach(c => set.delete(c));
+    }
+  });
+  return set;
+}
+function nodesCovering(codes){
+  const ids = new Set();
+  tree().nodes.forEach(n => { if(nodeCodeIds(n).some(c => codes.has(c))) ids.add(n.id); });
+  return ids;
+}
+
+function forkLabelsSvg(){
+  return tree().nodes.filter(n => n.forkType && FORK_LABEL[n.forkType]).map(n => {
+    const be = tree().edges.find(e => e.from === n.id && e.kind === "bus");
+    if(!be) return "";
+    return '<text class="forklabel fork-' + n.forkType + '" x="' + cx(n) + '" y="' + (be.busY - 5) + '" text-anchor="middle">' + FORK_LABEL[n.forkType] + '</text>';
+  }).join("");
+}
+function statusBadgeSvg(n, status){
+  const label = status === "gated" ? "GATED" : "OUT OF SCOPE";
+  const w = label.length * 6 + 10;
+  const x = n.x + n.w - w - 6, y = n.y + 6, h = 15;
+  return '<g class="badge-' + status + '">'
+    + '<rect class="badge-bg" x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="7"/>'
+    + '<text class="badge-tx" x="' + (x + w / 2) + '" y="' + (y + 11) + '" text-anchor="middle">' + label + '</text></g>';
+}
+
+function pathFor(e){
+  const a = byId(e.from), b = byId(e.to);
+  if(e.kind === "v"){ return "M" + cx(a) + " " + (a.y + a.h) + " V" + b.y; }
+  if(e.kind === "h"){ const midY = a.y + a.h / 2; return "M" + a.x + " " + midY + " H" + (b.x + b.w + 4); }
+  return "M" + cx(a) + " " + (a.y + a.h) + " V" + e.busY + " H" + cx(b) + " V" + b.y;
+}
+
+function renderTree(){
+  const edgeHtml = tree().edges.map(e => {
+    const cls = e.style === "dashed" ? "edge dashed" : "edge";
+    return '<path class="' + cls + '" d="' + pathFor(e) + '" marker-end="url(#arr)"/>';
+  }).join("");
+  elEdges.innerHTML = edgeHtml + forkLabelsSvg();
+
+  elNodes.innerHTML = tree().nodes.map(n => {
+    const codes = codeStr(n);
+    const second = codes
+      ? '<text class="code" x="' + cx(n) + '" y="' + (n.y + n.h - 15) + '" text-anchor="middle">' + esc(codes) + '</text>'
+      : (n.sub ? '<text class="sub" x="' + cx(n) + '" y="' + (n.y + n.h - 15) + '" text-anchor="middle">' + esc(n.sub) + '</text>' : "");
+    const titleY = (codes || n.sub) ? (n.y + 26) : (n.y + n.h / 2 + 5);
+    const sel = selected === n.id ? " selected" : "";
+    const lit = litSet ? (litSet.has(n.id) ? " lit" : " dimmed") : "";
+    const status = nodeStatus(n);
+    const badge = (nodeCodeIds(n).length && (status === "gated" || status === "out_of_scope")) ? statusBadgeSvg(n, status) : "";
+    return '<g class="node n-' + n.kind + sel + lit + '" data-id="' + n.id + '" tabindex="0" role="button" aria-label="' + escAttr(n.title) + '">'
+      + '<rect x="' + n.x + '" y="' + n.y + '" width="' + n.w + '" height="' + n.h + '" rx="10"/>'
+      + '<text class="t" x="' + cx(n) + '" y="' + titleY + '" text-anchor="middle">' + esc(n.title) + '</text>'
+      + second + badge + '</g>';
+  }).join("");
+}
+
+const KIND_LABEL = { start:"Entry", decision:"Decision", nurse:"Nurse time", noNurse:"No nurse time", outOfScope:"Out of scope" };
+
+const INTRO = '<div class="intro">'
+  + '<span class="kind-tag decision">Start here</span>'
+  + '<h2>How billing is decided</h2>'
+  + '<p>Each node is a decision or a billable service. Click one to see what it covers, the requirements, and how Brook handles it. Links inside the notes jump to related services.</p>'
+  + '<h3>Two tabs on code nodes</h3>'
+  + '<p>Service nodes show a <b>Summary</b> tab and a <b>Completion detail</b> tab. Completion detail holds per-code billing minimums and the time ladder, derived from the canonical model. Click any code chip to jump straight to its row.</p>'
+  + '<h3>Color &amp; forks</h3>'
+  + '<p>Teal services consume nurse clinical-staff time — the binding capacity constraint. Purple services do not (device, data, or physician). Gray nodes are decisions; dashed paths are conditional. A fork labeled <b>ALL THAT APPLY</b> is concurrent (bill every branch that fits); <b>CHOOSE ONE</b> is exclusive. An amber <b>GATED</b> badge marks a code Brook cannot bill yet.</p>'
+  + '<h3>Prerequisites &amp; profile</h3>'
+  + '<p>The <b>Before you can bill</b> chips list each prerequisite and how many codes it gates — click one to flash the affected nodes. Set a <b>Patient profile</b> (conditions, complexity, QMB, CGM, device) to light every code billable for that patient. It shows what is legal, not which track to prefer — track selection is optimized in the optimizer.</p>'
+  + (HAS_PARTNERS
+      ? '<h3>Partner &amp; rates</h3>'
+        + '<p>Pick a <b>Partner</b> to see its contracted rate beside each code in Completion detail and dim the codes it does not contract (a dash = not on that partner\'s schedule). Capitated partners show an out-of-scope banner and dim the whole tree — marginal CPT capture is $0. Partner and profile compose: a node stays lit only where a code is both contracted and clinically eligible.</p>'
+      : '')
+  + '<h3>Cross-program rules</h3>'
+  + '<p><b>Rules &amp; gates</b> (top) covers exclusivity, dependencies, and Brook decision gates that span nodes. Toggle <b>Edit content</b> to revise the prose, then <code>Download JSON</code> to keep changes.</p>'
+  + '</div>';
+
+function relatedHtml(n){
+  if(!n.related || !n.related.length) return "";
+  const pills = n.related.map(id => {
+    const t = byId(id);
+    return t ? '<span class="pill" data-node="' + id + '">' + esc(t.title) + '</span>' : "";
+  }).join("");
+  return '<h3>Related</h3><div class="related">' + pills + '</div>';
+}
+
+function tabbar(){
+  return '<div class="tabbar" role="tablist">'
+    + '<button role="tab" aria-selected="' + (activeTab === "summary") + '" data-tab="summary">Summary</button>'
+    + '<button role="tab" aria-selected="' + (activeTab === "completion") + '" data-tab="completion">Completion detail</button>'
+    + '</div>';
+}
+
+function summaryBody(n){
+  let h = "";
+  const d = n.detail || {};
+  const codes = derivedCodes(n);
+  if(codes.length){
+    h += '<div class="codes">' + codes.map(c => '<button class="chip" data-code="' + escAttr(c.code) + '" title="Show completion detail">' + esc(c.code) + '</button>').join("") + '</div>';
+    h += codes.map(c => c.label ? '<span class="codeline"><b>' + esc(c.code) + '</b> — ' + esc(c.label) + '</span>' : "").join("");
+  }
+  if(d.routing) h += '<h3>Routing</h3><p>' + d.routing + '</p>';
+  if(d.what) h += '<h3>What it is</h3><p>' + d.what + '</p>';
+  if(d.requirements && d.requirements.length) h += '<h3>Requirements</h3><ul>' + d.requirements.map(r => '<li>' + r + '</li>').join("") + '</ul>';
+  if(d.brook) h += '<h3>Brook notes</h3><p>' + d.brook + '</p>';
+  h += relatedHtml(n);
+  return h;
+}
+
+function completionBody(n){
+  let h = "";
+  const codes = derivedCodes(n);
+  const chain = derivedChain(n);
+  const flat = derivedFlat(n);
+  if(chain && chain.length){
+    h += '<h3>Bill at each cumulative time</h3>'
+      + '<p class="muted-note">Eligibility is the threshold; the ladder is the instruction. Climb to the highest tier the documented minutes support.</p>'
+      + '<div class="chain">'
+      + chain.map(s => '<div class="step"><span class="band">' + esc(s.band) + '</span><span class="stepcodes">' + esc(s.codes) + '</span></div>').join("")
+      + '</div>';
+  } else if(flat){
+    h += '<h3>Bill at each cumulative time</h3><p class="muted-note">' + esc(flat) + '</p>';
+  }
+  h += '<h3>Per-code completion minimums</h3>';
+  const rsrc = isCapitated()
+    ? (esc(selectedPartnerRec().name) + " — capitated, no per-code rate")
+    : (selectedPartner ? (esc(selectedPartnerRec().name) + " contracted rates; “—” = not on this partner’s schedule (not billable)")
+                       : (HAS_PARTNERS ? "All partners (canonical) — standardRates"
+                                       : "Representative CPT reimbursement rates (CY2026 Medicare PFS)"));
+  h += '<p class="muted-note">Rate source: ' + rsrc + '.</p>';
+  h += '<table class="creq"><thead><tr><th>Code</th><th>Eligible from</th><th>Rate</th><th>Billable again when</th><th>Stacks on</th><th>Excludes</th></tr></thead><tbody>';
+  h += codes.map(c => '<tr data-coderow="' + escAttr(c.code) + '">'
+    + '<td class="code">' + esc(c.code) + '</td>'
+    + '<td>' + esc(c.min || "—") + '</td>'
+    + (c.rate == null ? '<td class="rate not-contracted">—</td>' : '<td class="rate">' + esc(fmtRate(c.rate)) + '</td>')
+    + '<td>' + esc(c.cadence || "—") + '</td>'
+    + '<td>' + esc(c.stacks || "—") + '</td>'
+    + '<td>' + esc(c.excludes || "—") + '</td></tr>').join("");
+  h += '</tbody></table>';
+
+  h += '<h3>Defensible claim — required documentation</h3>';
+  h += '<p class="muted-note">Minimum met is not the same as a defensible claim. Keep contemporaneous records; RPM is under active CMS oversight.</p>';
+  h += codes.map(c => {
+    let block = '<div class="docblock" data-docrow="' + escAttr(c.code) + '">';
+    block += '<div class="dochdr"><b>' + esc(c.code) + '</b>' + (c.label ? ' — ' + esc(c.label) : "") + '</div>';
+    block += c.documentation.length
+      ? '<ul class="doclist">' + c.documentation.map(t => '<li>' + esc(docLabel(t)) + '</li>').join("") + '</ul>'
+      : '<p class="muted-note">No documentation requirements recorded.</p>';
+    const cites = citationLinks(c.citations);
+    if(cites) block += '<div class="cites">Sources: ' + cites + '</div>';
+    return block + '</div>';
+  }).join("");
+
+  h += '<p class="muted-note"><a class="xref" data-rules="1">Cross-program rules &amp; Brook gates ↗</a></p>';
+  return h;
+}
+
+function gateHtml(n){
+  let h = "";
+  const status = nodeStatus(n);
+  if(status === "gated" || status === "out_of_scope"){
+    h += '<span class="gatebadge ' + status + '">' + (status === "gated" ? "Gated" : "Out of scope") + '</span>';
+  }
+  gatesForNode(n).forEach(g => {
+    const cls = g.status || "flag";
+    const tag = cls === "flag" ? "Flag" : (cls === "gated" ? "Gated" : "Out of scope");
+    h += '<div class="gatenote ' + cls + '"><b>' + esc(g.id) + ' · ' + tag + '</b> — ' + esc(g.reason) + '</div>';
+  });
+  return h;
+}
+
+function viewHtml(n){
+  const hasCodes = nodeCodeIds(n).length > 0;
+  let h = '<span class="kind-tag ' + n.kind + '">' + (KIND_LABEL[n.kind] || "") + '</span>';
+  h += '<h2>' + esc(n.title) + '</h2>';
+  h += gateHtml(n);
+  if(hasCodes){
+    h += tabbar();
+    h += (activeTab === "completion") ? completionBody(n) : summaryBody(n);
+  } else {
+    h += summaryBody(n);
+  }
+  return h;
+}
+
+function editHtml(n){
+  const d = n.detail || {};
+  const reqText = (d.requirements || []).join("\n");
+  let h = '<span class="kind-tag ' + n.kind + '">Editing · ' + (KIND_LABEL[n.kind] || "") + '</span>';
+  h += '<h2>' + esc(n.title) + '</h2>';
+  h += '<div class="editnote">Edit the prose, then use <b>Download JSON</b> or <b>Copy JSON</b> to keep your changes and diff them back into the canonical model. Per-code facts and the time ladder are derived from the model — edit them in <code>cpt-model.json</code> and rebuild. Links use <code>&lt;a class="xref" data-node="ID"&gt;text&lt;/a&gt;</code>.</div>';
+  h += field("e-title", "Title", "input", esc(n.title));
+  if(d.routing !== undefined || n.kind === "decision") h += field("e-routing", "Routing", "textarea", esc(d.routing || ""));
+  h += field("e-what", "What it is", "textarea", esc(d.what || ""));
+  h += field("e-req", "Requirements (one per line)", "textarea", esc(reqText));
+  h += field("e-brook", "Brook notes", "textarea", esc(d.brook || ""));
+  return h;
+}
+
+function field(id, label, type, val, hint){
+  const ctrl = type === "input"
+    ? '<input id="' + id + '" type="text" value="' + val + '">'
+    : '<textarea id="' + id + '">' + val + '</textarea>';
+  return '<div class="field"><label for="' + id + '">' + label + '</label>' + ctrl + (hint ? '<div class="hint">' + hint + '</div>' : "") + '</div>';
+}
+
+function bindEdit(n){
+  const get = (id) => document.getElementById(id);
+  const t = get("e-title"); if(t) t.addEventListener("input", () => { n.title = t.value; renderTree(); });
+  n.detail = n.detail || {};
+  const r = get("e-routing"); if(r) r.addEventListener("input", () => { n.detail.routing = r.value; });
+  const w = get("e-what"); if(w) w.addEventListener("input", () => { n.detail.what = w.value; });
+  const rq = get("e-req"); if(rq) rq.addEventListener("input", () => { n.detail.requirements = rq.value.split("\n").map(s => s.trim()).filter(Boolean); });
+  const b = get("e-brook"); if(b) b.addEventListener("input", () => { n.detail.brook = b.value; });
+}
+
+function highlightRow(code){
+  const tr = elDetail.querySelector('[data-coderow="' + code + '"]');
+  const doc = elDetail.querySelector('[data-docrow="' + code + '"]');
+  if(!tr && !doc) return;
+  (tr || doc).scrollIntoView({ behavior: "smooth", block: "nearest" });
+  [tr, doc].forEach(el => { if(el) el.classList.add("row-hi"); });
+  setTimeout(() => [tr, doc].forEach(el => { if(el) el.classList.remove("row-hi"); }), 1600);
+}
+
+function renderDetail(){
+  if(!selected){ elDetail.innerHTML = INTRO; return; }
+  const n = byId(selected);
+  if(!n){ elDetail.innerHTML = INTRO; return; }
+  if(editing){ elDetail.innerHTML = editHtml(n); bindEdit(n); return; }
+  elDetail.innerHTML = viewHtml(n);
+  if(activeTab === "completion" && pendingHiCode){ highlightRow(pendingHiCode); pendingHiCode = null; }
+}
+
+function flashNode(id){
+  const g = elNodes.querySelector('[data-id="' + id + '"]');
+  if(!g) return;
+  g.classList.remove("flash");
+  void g.getBoundingClientRect();
+  g.classList.add("flash");
+  setTimeout(() => g.classList.remove("flash"), 1200);
+}
+
+function select(id, fromLink){
+  if(!byId(id)) return;
+  selected = id;
+  activeTab = "summary";
+  pendingHiCode = null;
+  renderTree();
+  renderDetail();
+  if(fromLink){
+    flashNode(id);
+    if(window.matchMedia("(max-width:1199px)").matches){ elDetail.scrollIntoView({ behavior: "smooth", block: "start" }); }
+  }
+}
+
+elNodes.addEventListener("click", (e) => {
+  const g = e.target.closest(".node");
+  if(g) select(g.dataset.id, false);
+});
+elNodes.addEventListener("keydown", (e) => {
+  if(e.key === "Enter" || e.key === " "){
+    const g = e.target.closest(".node");
+    if(g){ e.preventDefault(); select(g.dataset.id, false); }
+  }
+});
+
+elDetail.addEventListener("click", (e) => {
+  const tab = e.target.closest("[data-tab]");
+  if(tab){ activeTab = tab.dataset.tab; renderDetail(); return; }
+  const chip = e.target.closest("[data-code]");
+  if(chip){ activeTab = "completion"; pendingHiCode = chip.dataset.code; renderDetail(); return; }
+  const rules = e.target.closest("[data-rules]");
+  if(rules){ e.preventDefault(); openDrawer(); return; }
+  const link = e.target.closest("[data-node]");
+  if(link){ e.preventDefault(); select(link.dataset.node, true); return; }
+});
+
+function sourcesHtml(){
+  const src = data.sources || {};
+  const ids = Object.keys(src);
+  if(!ids.length) return "";
+  let h = '<h3>Sources</h3>';
+  h += ids.map(id => {
+    const s = src[id];
+    const title = esc(s.title || id);
+    return '<p class="src">' + (s.url ? '<a href="' + escAttr(s.url) + '" target="_blank" rel="noopener">' + title + '</a>' : title)
+      + (s.accessed ? ' · ' + esc(s.accessed) : "") + '</p>';
+  }).join("");
+  const log = data.changelog || [];
+  if(log.length){
+    h += '<h3>Changelog</h3><ul>' + log.map(e => '<li><b>' + esc(e.version) + '</b> (' + esc(e.date) + ') — ' + esc(e.note) + '</li>').join("") + '</ul>';
+  }
+  return h;
+}
+
+function renderDrawer(){
+  const r = tree().rules || { groups: [] };
+  let h = '<button class="close" id="drawerClose" aria-label="Close">×</button>';
+  h += '<span class="kind-tag decision">Reference</span><h2>Rules &amp; gates</h2>';
+  h += '<p class="muted-note">Cross-program constraints and Brook decision gates that span nodes.</p>';
+  if(editing){
+    h += '<div class="editnote">Editing rules. One item per line in each group. Changes export with the rest of the model.</div>';
+    (r.groups || []).forEach((g, gi) => {
+      h += field("r-title-" + gi, "Group title", "input", esc(g.title || ""));
+      h += field("r-items-" + gi, "Items (one per line)", "textarea", esc((g.items || []).join("\n")));
+    });
+  } else {
+    (r.groups || []).forEach(g => {
+      h += '<h3>' + esc(g.title) + '</h3><ul>' + (g.items || []).map(it => '<li>' + it + '</li>').join("") + '</ul>';
+    });
+    h += sourcesHtml();
+  }
+  drawerEl.innerHTML = h;
+  document.getElementById("drawerClose").addEventListener("click", closeDrawer);
+  if(editing){
+    (r.groups || []).forEach((g, gi) => {
+      const ti = document.getElementById("r-title-" + gi);
+      if(ti) ti.addEventListener("input", () => { g.title = ti.value; });
+      const it = document.getElementById("r-items-" + gi);
+      if(it) it.addEventListener("input", () => { g.items = it.value.split("\n").map(s => s.trim()).filter(Boolean); });
+    });
+  }
+}
+
+function openDrawer(){ renderDrawer(); backdropEl.classList.add("open"); drawerEl.classList.add("open"); }
+function closeDrawer(){ backdropEl.classList.remove("open"); drawerEl.classList.remove("open"); }
+backdropEl.addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => { if(e.key === "Escape") closeDrawer(); });
+rulesBtn.addEventListener("click", () => { if(drawerEl.classList.contains("open")) closeDrawer(); else openDrawer(); });
+
+const editBtn = document.getElementById("editBtn");
+editBtn.addEventListener("click", () => {
+  editing = !editing;
+  editBtn.setAttribute("aria-pressed", String(editing));
+  editBtn.textContent = editing ? "Done editing" : "Edit content";
+  if(editing && !selected) setStatus("Select a node to edit its prose.");
+  renderDetail();
+  if(drawerEl.classList.contains("open")) renderDrawer();
+});
+
+function setStatus(msg){
+  elStatus.textContent = msg || "";
+  if(msg) setTimeout(() => { if(elStatus.textContent === msg) elStatus.textContent = ""; }, 4000);
+}
+
+document.getElementById("copyBtn").addEventListener("click", async () => {
+  const json = JSON.stringify(data, null, 2);
+  try{
+    await navigator.clipboard.writeText(json);
+    setStatus("Model copied to clipboard.");
+  }catch(err){
+    const ta = document.createElement("textarea");
+    ta.value = json; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); setStatus("Model copied to clipboard."); }
+    catch(e2){ setStatus("Copy blocked — use Download JSON."); }
+    document.body.removeChild(ta);
+  }
+});
+
+document.getElementById("dlBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "cpt-model.json";
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  setStatus("Downloaded cpt-model.json");
+});
+
+document.getElementById("importInput").addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try{
+      const parsed = JSON.parse(reader.result);
+      if(!parsed || !parsed.tree || !Array.isArray(parsed.tree.nodes) || !parsed.codes || !parsed.ladders) throw new Error("missing tree/codes/ladders");
+      data = parsed;
+      if(selected && !byId(selected)) selected = null;
+      activeTab = "summary";
+      selectedPartner = null;
+      renderAll();
+      resetOverlay();
+      if(drawerEl.classList.contains("open")) renderDrawer();
+      setStatus("Imported " + file.name);
+    }catch(err){
+      setStatus("Import failed — not a valid cpt-model JSON.");
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = "";
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  data = clone(MODEL);
+  selected = null;
+  activeTab = "summary";
+  if(editing){ editing = false; editBtn.setAttribute("aria-pressed", "false"); editBtn.textContent = "Edit content"; }
+  closeDrawer();
+  renderAll();
+  resetOverlay();
+  setStatus("Restored built-in model.");
+});
+
+/* ---- prerequisites gate band ---- */
+const gatebandEl = document.getElementById("gateband");
+const prooutEl = document.getElementById("proout");
+
+function renderGateBand(){
+  const pr = data.prereqs || {};
+  const map = prereqCodeMap();
+  gatebandEl.innerHTML = Object.keys(pr).map(id => {
+    const list = map[id] || [];
+    return '<button class="prechip" data-prereq="' + escAttr(id) + '" title="Gates ' + list.length + ' code(s): ' + escAttr(list.join(", ")) + '">'
+      + esc(pr[id].label) + '<span class="prcount">' + list.length + '</span></button>';
+  }).join("");
+}
+
+gatebandEl.addEventListener("click", (e) => {
+  const chip = e.target.closest("[data-prereq]");
+  if(!chip) return;
+  const pid = chip.dataset.prereq;
+  const list = (prereqCodeMap()[pid] || []);
+  nodesRequiringPrereq(pid).forEach(flashNode);
+  setStatus(((data.prereqs[pid] || {}).label || pid) + " gates: " + (list.join(", ") || "—"));
+});
+
+/* ---- partner overlay + profile highlighter (one unified dimming path) ---- */
+const capbannerEl = document.getElementById("capbanner");
+const partnerSelEl = document.getElementById("p-partner");
+
+function renderPartnerSelect(){
+  const partners = data.partners || {};
+  const keys = Object.keys(partners);
+  // Public build: no partners -> hide the selector and the partner-specific footer clause.
+  if(!keys.length){
+    const field = document.getElementById("partner-field");
+    if(field) field.style.display = "none";
+    const foot = document.getElementById("partner-foot-note");
+    if(foot) foot.style.display = "none";
+    selectedPartner = null;
+    return;
+  }
+  const ffs = keys.filter(k => partners[k].rates);
+  const cap = keys.filter(k => partners[k].scope === "capitated");
+  let h = '<option value="">All partners (canonical)</option>';
+  if(ffs.length) h += '<optgroup label="Fee-for-service">'
+    + ffs.map(k => '<option value="' + escAttr(k) + '">' + esc(partners[k].name || k) + '</option>').join("") + '</optgroup>';
+  if(cap.length) h += '<optgroup label="Capitated (out of scope)">'
+    + cap.map(k => '<option value="' + escAttr(k) + '">' + esc(partners[k].name || k) + '</option>').join("") + '</optgroup>';
+  partnerSelEl.innerHTML = h;
+  if(selectedPartner && partners[selectedPartner]) partnerSelEl.value = selectedPartner;
+  else { partnerSelEl.value = ""; selectedPartner = null; }
+}
+
+function readProfile(){
+  profile.conditions = parseInt(document.getElementById("p-cond").value, 10) || 0;
+  profile.mdm = document.getElementById("p-mdm").checked;
+  profile.qmb = document.getElementById("p-qmb").checked;
+  profile.cgm = document.getElementById("p-cgm").checked;
+  profile.device = document.getElementById("p-dev").checked;
+}
+
+function applyOverlay(){
+  if(isCapitated()){
+    const p = selectedPartnerRec();
+    capbannerEl.innerHTML = '<b>' + esc(p.name) + ' — capitated, out of scope.</b> ' + esc(p.capitation || "")
+      + ' <span class="capnote">Marginal CPT capture is $0; manage by engagement, outcomes, and retention. The tree is dimmed.</span>';
+    capbannerEl.hidden = false;
+    litSet = new Set();   // empty -> every node dims
+    prooutEl.innerHTML = '<span class="handoff">' + esc(p.name) + ' is capitated — no marginal CPT capture, so no code is billable per unit.</span>';
+    renderTree();
+    return;
+  }
+  capbannerEl.hidden = true; capbannerEl.innerHTML = "";
+  const partnerActive = !!selectedPartner;
+  if(!partnerActive && !profileActive){
+    litSet = null;
+    prooutEl.innerHTML = '<span class="handoff">Pick a partner or set a patient profile to highlight billable codes — what is legal and contracted, not which track to prefer.</span>';
+    renderTree();
+    return;
+  }
+  const codes = billableCodeSet();
+  litSet = nodesCovering(codes);
+  const list = [...codes].sort();
+  const who = partnerActive ? ('<span class="partner">' + esc(selectedPartnerRec().name) + '</span> — ') : "";
+  let h = '<span>' + who + 'Billable' + (profileActive ? ' for this profile' : '') + ':</span> ';
+  h += list.length
+    ? list.map(c => '<span class="setcode">' + esc(c) + '</span>').join(" ")
+    : '<span class="none">no codes match the current partner and profile</span>';
+  h += ' <span class="handoff">· multiple tracks may be eligible; track selection is optimized in the optimizer.</span>';
+  prooutEl.innerHTML = h;
+  renderTree();
+}
+
+function clearProfileInputs(){
+  document.getElementById("p-cond").value = "0";
+  ["p-mdm", "p-qmb", "p-cgm", "p-dev"].forEach(id => { document.getElementById(id).checked = false; });
+  profile.conditions = 0; profile.mdm = profile.qmb = profile.cgm = profile.device = false;
+  profileActive = false;
+}
+function clearProfile(){ clearProfileInputs(); applyOverlay(); }          // "Clear highlight" — clears profile, keeps partner
+function resetOverlay(){ clearProfileInputs(); selectedPartner = null; partnerSelEl.value = ""; applyOverlay(); }  // full reset
+
+["p-cond", "p-mdm", "p-qmb", "p-cgm", "p-dev"].forEach(id => {
+  document.getElementById(id).addEventListener("change", () => { readProfile(); profileActive = true; applyOverlay(); });
+});
+document.getElementById("p-clear").addEventListener("click", clearProfile);
+partnerSelEl.addEventListener("change", () => { selectedPartner = partnerSelEl.value || null; applyOverlay(); });
+
+function renderVersionChip(){
+  const v = data.version ? ("v" + data.version) : "";
+  const yr = data.effectiveYear ? (" · " + data.effectiveYear) : "";
+  const mode = data.mode ? (' <span class="mode">' + esc(data.mode) + '</span>') : "";
+  vchipEl.innerHTML = esc(v + yr) + mode;
+}
+
+function renderAll(){ renderVersionChip(); renderPartnerSelect(); renderGateBand(); renderTree(); renderDetail(); }
+
+renderAll();
+applyOverlay();   // seed litSet / proout / capitated banner for the current (default) overlay state
+</script>
+</body>
+</html>
